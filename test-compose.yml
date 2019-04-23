@@ -1,0 +1,59 @@
+version: "3.7"
+services:
+  auth-proxy:
+    image: keycloak/keycloak-gatekeeper:5.0.0
+    hostname: servicetest-proxy.example.com
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+        window: 120s
+      update_config:
+        parallelism: 1
+        failure_action: rollback
+      labels:
+        traefik.port: 3000
+        traefik.frontend.rule: Host:servicetest.example.com
+        traefik.protocol: http
+        traefik.frontend.passHostHeader: 'true'
+        traefik.docker.network: transit_servicetest_traefik
+    command: >
+      --discovery-url=https://auth.example.com/auth/realms/master
+      --skip-openid-provider-tls-verify=true
+      --client-id=servicetest
+      --listen=0.0.0.0:3000
+      --client-secret=<Your-Secret>
+      --enable-refresh-tokens=true
+      --redirection-url=https://servicetest.example.com
+      --encryption-key=<Your-Encryption-Key>
+      --upstream-url=http://app:7681/
+    networks:
+      - transit_servicetest_traefik
+      - internal
+
+  app:
+    image: hackinglab/hl-kali-docker-ttyd
+    hostname: servicetest.example.com
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+        window: 120s
+      update_config:
+        parallelism: 1
+        failure_action: rollback
+      labels:
+        traefik.enable: 'false'
+    networks:
+      - transit_servicetest_traefik
+      - internal
+
+networks:
+  transit_servicetest_traefik:
+    external: true
+  internal:
+    internal: true

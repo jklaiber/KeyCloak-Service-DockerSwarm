@@ -1,0 +1,65 @@
+version: "3.7"
+services:
+  mariadb:
+    image: mariadb:10.3.14
+    hostname: keycloak-db.example.com
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+        window: 120s
+      update_config:
+        parallelism: 1
+        failure_action: rollback
+      labels:
+        traefik.enabled: 'false'
+    env_file:
+      - keycloak-prod-db.env
+    volumes:
+      - type: volume
+        source: keycloak-db
+        target: /var/lib/mysql
+    networks:
+      - internal
+
+  keycloak:
+    image: jboss/keycloak:5.0.0
+    hostname: auth.example.com
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+        window: 120s
+      update_config:
+        parallelism: 1
+        failure_action: rollback
+      labels:
+        traefik.port: 8080
+        traefik.frontend.rule: Host:auth.example.com
+        traefik.frontend.passHostHeader: 'true'
+        traefik.protocol: http
+        traefik.docker.network: transit_keycloak_traefik
+    env_file:
+      - keycloak-prod-auth.env
+    networks:
+      - transit_keycloak_traefik
+      - internal
+    depends_on:
+      - mariadb
+
+networks:
+  transit_keycloak_traefik:
+    external: true
+  internal:
+    internal: true
+
+volumes:
+  keycloak-db:
+    driver_opts:
+      type: "nfs"
+      o: "addr=datadrive.example.com,nolock,soft,rw"
+      device: ":/docker/keycloak/db"
